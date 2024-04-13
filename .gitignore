@@ -1,0 +1,7 @@
+*~
+*#
+*.kit
+*.vfs/*
+Makefile
+Makefile.in
+
