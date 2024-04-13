@@ -8,7 +8,7 @@
 #  Author        : $Author$
 #  Created By    : Robert Heller
 #  Created       : Sat Apr 13 12:36:44 2024
-#  Last Modified : <240413.1238>
+#  Last Modified : <240413.1453>
 #
 #  Description	
 #
@@ -46,5 +46,32 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = BuildScripts BuildData Scripts
 
-EXTRA_DIST = bootstrap
+EXTRA_DIST = bootstrap TkGCal.tcl.in
 
+bin_SCRIPTS = TkGCal${EXEEXT}
+
+TCLKIT = $(top_builddir)/BuildData/tclkit${BEXEEXT}
+BUILT_SOURCES = $(TCLKIT)
+
+
+TkGCal${EXEEXT}: TkGCal.tcl $(wildcard Scripts/*.tcl)
+	-rm -rf TkGCal.vfs TkGCal.kit
+	$(TCLKIT) $(top_srcdir)/BuildScripts/sdx.kit qwrap $(srcdir)/TkGCal.tcl
+	$(TCLKIT) $(top_srcdir)/BuildScripts/sdx.kit unwrap TkGCal.kit
+	-rm -rf TkGCal.kit
+	$(TCLKIT) $(top_srcdir)/BuildScripts/AddKitDir.kit TkGCal lib \
+		$(SNITLIB)
+	$(TCLKIT) $(top_srcdir)/BuildScripts/AddKitFile.kit TkGCal \
+		lib/Common Scripts/*.tcl Scripts/*.gif Scripts/*.png \
+		Scripts/*.xpm Scripts/*.xbm
+	$(TCLKIT) $(top_srcdir)/BuildScripts/MakePkgIndex.kit TkGCal \
+		Common
+	$(TCLKIT) $(top_srcdir)/BuildScripts/sdx.kit wrap TkGCal${EXEEXT} \
+		-runtime $(top_srcdir)/BuildData/$(TCLKITRUN)
+	-rm -rf TkGCal.vfs TkGCal.kit 
+	
+
+$(top_builddir)/BuildData/tclkit${BEXEEXT}: FORCE
+	$(MAKE) -C $(top_builddir)/BuildData tclkit${BEXEEXT}
+
+FORCE:

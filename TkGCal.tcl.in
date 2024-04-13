@@ -8,7 +8,7 @@
 #  Author        : $Author$
 #  Created By    : Robert Heller
 #  Created       : Sat Apr 13 13:35:58 2024
-#  Last Modified : <240413.1353>
+#  Last Modified : <240413.1808>
 #
 #  Description	
 #
@@ -46,8 +46,9 @@
 package require snit
 package require Tk
 package require tile
+package require MainWindow
 
-snit::type TkGCal {
+snit::widget TkGCal {
     typevariable GCALCLI {@GCALCLI@}
     proc filterVT100 {string} {
         set string [regsub -all [format {%c\(0q%c\(B} 27 27] $string {─}]
@@ -72,9 +73,153 @@ snit::type TkGCal {
     proc ReminderCommand {minutes} {
         return [list $GCALCLI remind --use-reminders 15]
     }
+    proc AddCommand {args} {
+        return [concat  $GCALCLI add --noprompt $args]
+    }
+    typecomponent mainwindow
+    typecomponent calendar
+    typecomponent ImageDir
     typeconstructor {
+        set ImageDir [file join [file dirname [file dirname [info script]]] Common]
+        #puts stderr "*** typeconstructor: ImageDir is $ImageDir"
+        set leftArrow [image create bitmap  -file [file join $ImageDir left.xbm]]
+        set rightArrow [image create bitmap  -file [file join $ImageDir right.xbm]]
+        ttk::style layout flatbutton [ttk::style layout TButton]
+        foreach {o v} [ttk::style configure TButton] {
+            ttk::style configure flatbutton $o $v
+        }
+        ttk::style configure flatbutton -relief flat
+        ttk::style layout headlabel [ttk::style layout TLabel]
+        foreach {o v} [ttk::style configure TLabel] {
+            ttk::style configure headlabel $o $v
+        }
+        ttk::style configure headlabel -font [font create -family Times \
+                                              -size 20 -weight bold]
+        ttk::style layout weekendlabel [ttk::style layout TLabel]
+        foreach {o v} [ttk::style configure TLabel] {
+            ttk::style configure weekendlabel $o $v
+        }
+        ttk::style configure weekendlabel \
+              -font [font create -family Times -slant italic] \
+              -foreground red
+        ttk::style layout weekdaylabel [ttk::style layout TLabel]
+        foreach {o v} [ttk::style configure TLabel] {
+            ttk::style configure weekdaylabel $o $v
+        }
+        ttk::style configure weekdaylabel -font [font create -family Times \
+                                            -slant roman]
+        ttk::style layout weekendbutton [ttk::style layout TButton]
+        ttk::style configure weekendbutton -relief flat
+        ttk::style configure weekendbutton -font [font create -family Times -slant italic] \
+              -foreground blue
+        ttk::style layout weekdaybutton [ttk::style layout TButton]
+        ttk::style configure weekdaybutton -relief flat
+        ttk::style configure weekdaybutton -font [font create -family Times -slant roman] \
+              -foreground blue
+        
         global argv
         global argv0
-        
+        set mainwindow [mainwindow .mainwindow -scrolling false]
+        pack $mainwindow -expand yes -fill both
+        set frame [$mainwindow scrollwindow getframe]
+        set calendar [TkGCal create $frame.tkgcal]
+        $mainwindow scrollwindow setwidget $calendar
+        if {[set index [lsearch -exact $argv -iconic]] < 0} {
+            $mainwindow showit
+        } else {
+            set argv [lreplace $argv $index $index]
+        }
+    }
+    component month
+    component year
+    component calframe
+    typevariable leftArrow
+    typevariable rightArrow
+    variable currentMonth
+    variable currentYear
+    option -xscrollcommand
+    option -yscrollcommand
+    constructor {args} {
+        set currentMonth [clock format [clock scan now] -format %B]
+        set currentYear [clock format [clock scan now] -format %Y]
+        set headframe [ttk::frame $win.headframe -relief groove -borderwidth 3]
+        pack $headframe -expand yes -fill x
+        set prevmonth [ttk::button $headframe.prevmonth \
+                       -style flatbutton -command [mymethod _prevMonth] \
+                       -image $leftArrow]
+        pack $prevmonth -side left
+        install month using ttk::label $headframe.month \
+              -textvariable [myvar currentMonth] -style headlabel \
+              -justify center -anchor center
+        pack $month -side left -fill x -expand yes
+        set nextmonth [ttk::button $headframe.nextmonth \
+                       -style flatbutton -command [mymethod _nextMonth] \
+                       -image $rightArrow]
+        pack $nextmonth -side left
+        set prevyear [ttk::button $headframe.prevyear \
+                      -style flatbutton -command [mymethod _prevYear] \
+                      -image $leftArrow]
+        pack $prevyear -side left
+        install year using ttk::label $headframe.year \
+              -textvariable [myvar currentYear]  -style headlabel \
+              -justify center -anchor center
+        pack $year -side left -fill x -expand yes
+        set nextyear [ttk::button $headframe.nextyear \
+                      -style flatbutton -command [mymethod _nextYear] \
+                      -image $rightArrow]
+        pack $nextyear -side left
+        install calframe using ttk::frame $win.calframe \
+              -relief groove -borderwidth 3 -padding {50 0 50 50}
+        pack $calframe -expand yes -fill both 
+        foreach d {Sun Mon Tue Wed Thu Fri Sat} i {0 1 2 3 4 5 6} \
+              s {weekendlabel weekdaylabel weekdaylabel weekdaylabel weekdaylabel weekdaylabel weekendlabel} {\
+              grid configure [ttk::label $calframe.[string tolower $d] \
+                              -text $d -style $s] -column $i -row 0 -sticky news
+        }
+        $self _populateCurrentMonth
+    }
+    method _populateCurrentMonth {} {
+        set rows [lindex [grid size $calframe] 1]
+        if {$rows > 1} {
+            for {set irow [expr {$rows - 1}]} {$irow > 0} {incr irow -1} {
+                foreach s [grid slaves $calframe -row $irow] {
+                    destroy $s
+                }
+            }
+        }
+        set day [clock scan [format "%s/1/%d" $currentMonth $currentYear] -format {%B/%d/%Y}]
+        set gridrow 1
+        while {[clock format $day -format %B] eq $currentMonth} {
+            set today [clock format $day -format {%m/%d/%Y}]
+            set dayofweek [clock format $day -format %w]
+            set date      [clock format $day -format %e]
+            set day1 [clock add $day 1 day]
+            set tomorrow [clock format $day1 -format {%m/%d/%Y}]
+            set events [exec gcalcli agenda --details end $today $tomorrow]
+            if {[regexp {No Events Found\.\.\.} $events] > 0} {
+                # no events
+                if {$dayofweek == 0 || $dayofweek == 6} {
+                    set style weekendlabel
+                } else {
+                    set style weekdaylabel
+                }
+                grid configure [ttk::label $calframe.d_$date \
+                                -text $date -anchor e -style $style] \
+                      -row $gridrow -column $dayofweek
+            } else {
+                # has events
+                if {$dayofweek == 0 || $dayofweek == 6} {
+                    set style weekendbutton
+                } else {
+                    set style weekdaybutton
+                }
+                grid configure [ttk::button $calframe.d_$date \
+                                -text $date -style $style \
+                                -command [mymethod _showdate $day]] \
+                       -row $gridrow -column $dayofweek
+            }
+            if {$dayofweek == 6} {incr gridrow}
+            set day $day1
+        }
     }
 }
