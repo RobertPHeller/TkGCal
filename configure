@@ -615,7 +615,7 @@ PACKAGE_STRING='TkGCal 0.0.0'
 PACKAGE_BUGREPORT='support@deepsoft.com'
 PACKAGE_URL=''
 
-ac_unique_file="TkGCal.tcl"
+ac_unique_file="TkGCal.tcl.in"
 # Factoring default headers for most tests.
 ac_includes_default="\
 #include <stddef.h>
@@ -5260,7 +5260,7 @@ fi
 
 
 
-ac_config_files="$ac_config_files Makefile BuildScripts/Makefile BuildData/Makefile Scripts/Makefile"
+ac_config_files="$ac_config_files Makefile BuildScripts/Makefile BuildData/Makefile Scripts/Makefile TkGCal.tcl"
 
 ac_config_commands="$ac_config_commands default"
 
@@ -6009,6 +6009,7 @@ do
     "BuildScripts/Makefile") CONFIG_FILES="$CONFIG_FILES BuildScripts/Makefile" ;;
     "BuildData/Makefile") CONFIG_FILES="$CONFIG_FILES BuildData/Makefile" ;;
     "Scripts/Makefile") CONFIG_FILES="$CONFIG_FILES Scripts/Makefile" ;;
+    "TkGCal.tcl") CONFIG_FILES="$CONFIG_FILES TkGCal.tcl" ;;
     "default") CONFIG_COMMANDS="$CONFIG_COMMANDS default" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;

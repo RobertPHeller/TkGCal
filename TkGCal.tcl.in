@@ -1,0 +1,80 @@
+#*****************************************************************************
+#
+#  System        : 
+#  Module        : 
+#  Object Name   : $RCSfile$
+#  Revision      : $Revision$
+#  Date          : $Date$
+#  Author        : $Author$
+#  Created By    : Robert Heller
+#  Created       : Sat Apr 13 13:35:58 2024
+#  Last Modified : <240413.1353>
+#
+#  Description	
+#
+#  Notes
+#
+#  History
+#	
+#*****************************************************************************
+## @copyright
+#    Copyright (C) 2024  Robert Heller D/B/A Deepwoods Software
+#			51 Locke Hill Road
+#			Wendell, MA 01379-9728
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+# @file TkGCal.tcl
+# @author Robert Heller
+# @date Sat Apr 13 13:35:58 2024
+# 
+#
+#*****************************************************************************
+
+
+package require snit
+package require Tk
+package require tile
+
+snit::type TkGCal {
+    typevariable GCALCLI {@GCALCLI@}
+    proc filterVT100 {string} {
+        set string [regsub -all [format {%c\(0q%c\(B} 27 27] $string {─}]
+        set string [regsub -all [format {%c\(0x%c\(B} 27 27] $string {│}]
+        set string [regsub -all [format {%c\(0j%c\(B} 27 27] $string {┘}]
+        set string [regsub -all [format {%c\(0k%c\(B} 27 27] $string {┐}]
+        set string [regsub -all [format {%c\(0l%c\(B} 27 27] $string {┌}]
+        set string [regsub -all [format {%c\(0m%c\(B} 27 27] $string {└}]
+        set string [regsub -all [format {%c\(0n%c\(B} 27 27] $string {┼}]
+        set string [regsub -all [format {%c\(0t%c\(B} 27 27] $string {├}]
+        set string [regsub -all [format {%c\(0u%c\(B} 27 27] $string {┤}]
+        set string [regsub -all [format {%c\(0v%c\(B} 27 27] $string {┴}]
+        set string [regsub -all [format {%c\(0w%c\(B} 27 27] $string {┬}]
+        return $string
+    }
+    proc AgendaCommand {start end} {
+        return [list $GCALCLI --nocolor --details end $start $end]
+    }
+    proc CalWeekCommand {start weeks} {
+        return [list $GCALCLI --nocolor calw $start $weeks]
+    }
+    proc ReminderCommand {minutes} {
+        return [list $GCALCLI remind --use-reminders 15]
+    }
+    typeconstructor {
+        global argv
+        global argv0
+        
+    }
+}

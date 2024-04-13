@@ -8,7 +8,7 @@ dnl *  Date          : $Date$
 dnl *  Author        : $Author$
 dnl *  Created By    : Robert Heller
 dnl *  Created       : Sat Apr 13 13:06:21 2024
-dnl *  Last Modified : <240413.1318>
+dnl *  Last Modified : <240413.1338>
 dnl *
 dnl *  Description	
 dnl *
@@ -49,7 +49,7 @@ AC_CANONICAL_HOST
 AC_SUBST(build)
 AC_CANONICAL_TARGET
 AC_SUBST(target)
-AC_CONFIG_SRCDIR([TkGCal.tcl])
+AC_CONFIG_SRCDIR([TkGCal.tcl.in])
 AM_INIT_AUTOMAKE
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -184,6 +184,7 @@ AC_PATH_PROG(SED,sed)
 AC_CONFIG_FILES([Makefile \
 		 BuildScripts/Makefile \
 		 BuildData/Makefile \
-		 Scripts/Makefile])
+		 Scripts/Makefile \
+		 TkGCal.tcl])
 AC_CONFIG_COMMANDS([default])
 AC_OUTPUT
