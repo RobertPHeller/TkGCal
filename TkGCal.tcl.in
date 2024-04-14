@@ -8,7 +8,7 @@
 #  Author        : $Author$
 #  Created By    : Robert Heller
 #  Created       : Sat Apr 13 13:35:58 2024
-#  Last Modified : <240413.1808>
+#  Last Modified : <240413.2024>
 #
 #  Description	
 #
@@ -47,7 +47,8 @@ package require snit
 package require Tk
 package require tile
 package require MainWindow
-
+package require ScrollWindow
+package require ROText
 snit::widget TkGCal {
     typevariable GCALCLI {@GCALCLI@}
     proc filterVT100 {string} {
@@ -65,7 +66,10 @@ snit::widget TkGCal {
         return $string
     }
     proc AgendaCommand {start end} {
-        return [list $GCALCLI --nocolor --details end $start $end]
+        return [list $GCALCLI --nocolor agenda --details end $start $end]
+    }
+    proc AgendaAllCommand {start end} {
+        return [list $GCALCLI --nocolor agenda --details all $start $end]
     }
     proc CalWeekCommand {start weeks} {
         return [list $GCALCLI --nocolor calw $start $weeks]
@@ -78,7 +82,10 @@ snit::widget TkGCal {
     }
     typecomponent mainwindow
     typecomponent calendar
-    typecomponent ImageDir
+    typecomponent daysagenda
+    typecomponent   daysagenda_date
+    typecomponent   daysagenda_agenda
+    typevariable ImageDir
     typeconstructor {
         set ImageDir [file join [file dirname [file dirname [info script]]] Common]
         #puts stderr "*** typeconstructor: ImageDir is $ImageDir"
@@ -121,8 +128,23 @@ snit::widget TkGCal {
         global argv0
         set mainwindow [mainwindow .mainwindow -scrolling false]
         pack $mainwindow -expand yes -fill both
+        set daysagenda [$mainwindow slideout add DaysAgenda]
+        set daysagenda_date [ttk::labelframe $daysagenda.date -labelanchor n \
+                             -text "The Date"]
+        pack $daysagenda_date -expand yes -fill both
+        set scrollw [ScrolledWindow $daysagenda_date.scrollw \
+                     -scrollbar both -auto both]
+        pack $scrollw -expand yes -fill both
+        set daysagenda_agenda [ROText [$scrollw getframe].agenda -width 100]
+        $scrollw setwidget $daysagenda_agenda
+        pack [ttk::button $daysagenda.close -text "Close" \
+              -command [list $mainwindow slideout hide DaysAgenda]] \
+              -expand yes -fill x
         set frame [$mainwindow scrollwindow getframe]
-        set calendar [TkGCal create $frame.tkgcal]
+        set calendar [TkGCal create $frame.tkgcal \
+                      -labelframe $daysagenda_date \
+                      -rotext $daysagenda_agenda \
+                      -showagenda [list $mainwindow slideout show DaysAgenda]]
         $mainwindow scrollwindow setwidget $calendar
         if {[set index [lsearch -exact $argv -iconic]] < 0} {
             $mainwindow showit
@@ -139,11 +161,14 @@ snit::widget TkGCal {
     variable currentYear
     option -xscrollcommand
     option -yscrollcommand
+    option -labelframe -default {}
+    option -rotext -default {}
+    option -showagenda -default {}
     constructor {args} {
         set currentMonth [clock format [clock scan now] -format %B]
         set currentYear [clock format [clock scan now] -format %Y]
         set headframe [ttk::frame $win.headframe -relief groove -borderwidth 3]
-        pack $headframe -expand yes -fill x
+        pack $headframe -fill x
         set prevmonth [ttk::button $headframe.prevmonth \
                        -style flatbutton -command [mymethod _prevMonth] \
                        -image $leftArrow]
@@ -170,12 +195,13 @@ snit::widget TkGCal {
         pack $nextyear -side left
         install calframe using ttk::frame $win.calframe \
               -relief groove -borderwidth 3 -padding {50 0 50 50}
-        pack $calframe -expand yes -fill both 
+        pack $calframe -fill both 
         foreach d {Sun Mon Tue Wed Thu Fri Sat} i {0 1 2 3 4 5 6} \
               s {weekendlabel weekdaylabel weekdaylabel weekdaylabel weekdaylabel weekdaylabel weekendlabel} {\
               grid configure [ttk::label $calframe.[string tolower $d] \
                               -text $d -style $s] -column $i -row 0 -sticky news
         }
+        $self configurelist $args
         $self _populateCurrentMonth
     }
     method _populateCurrentMonth {} {
@@ -188,15 +214,21 @@ snit::widget TkGCal {
             }
         }
         set day [clock scan [format "%s/1/%d" $currentMonth $currentYear] -format {%B/%d/%Y}]
+        set start [clock format $day -format {%m/%d/%Y}]
+        set lastday [clock add $day 1 month -1 day]
+        set end [clock format $lastday -format {%m/%d/%Y}]
+        set cmd [AgendaCommand $start $end]
+        #puts stderr "*** $self _populateCurrentMonth: cmd is \{$cmd\}"
+        set dates [eval [concat exec $cmd]]
+        #puts stderr "*** $self _populateCurrentMonth: dates is \{$dates\}"
         set gridrow 1
         while {[clock format $day -format %B] eq $currentMonth} {
-            set today [clock format $day -format {%m/%d/%Y}]
             set dayofweek [clock format $day -format %w]
             set date      [clock format $day -format %e]
             set day1 [clock add $day 1 day]
-            set tomorrow [clock format $day1 -format {%m/%d/%Y}]
-            set events [exec gcalcli agenda --details end $today $tomorrow]
-            if {[regexp {No Events Found\.\.\.} $events] > 0} {
+            set pattern [clock format $day -format {^%a %b %d}]
+            #puts stderr "*** $self _populateCurrentMonth: pattern is \{$pattern\}"
+            if {[regexp -line $pattern $dates] < 1} {
                 # no events
                 if {$dayofweek == 0 || $dayofweek == 6} {
                     set style weekendlabel
@@ -220,6 +252,58 @@ snit::widget TkGCal {
             }
             if {$dayofweek == 6} {incr gridrow}
             set day $day1
+        }
+    }
+    method _prevMonth {} {
+        set day [clock scan [format "%s/1/%d" $currentMonth $currentYear] -format {%B/%d/%Y}]
+        set day [clock add $day -1 month]
+        set currentMonth [clock format $day -format %B]
+        set currentYear  [clock format $day -format %Y]
+        $self _populateCurrentMonth
+    }
+    method _nextMonth {} {
+        set day [clock scan [format "%s/1/%d" $currentMonth $currentYear] -format {%B/%d/%Y}]
+        set day [clock add $day 1 month]
+        set currentMonth [clock format $day -format %B]
+        set currentYear  [clock format $day -format %Y]
+        $self _populateCurrentMonth
+    }
+    method _prevYear {} {
+        incr currentYear -1
+        $self _populateCurrentMonth
+    }
+    method _nextYear {} {
+        incr currentYear
+        $self _populateCurrentMonth
+    }
+    variable agendaFP
+    variable agendaDone
+    method _showdate {day} {
+        if {$options(-labelframe) ne {}} {
+            $options(-labelframe) configure \
+                  -text [clock format $day -format {%A %B %e, %Y}]
+        }
+        set tomorrow [clock add $day 1 day]
+        set start [clock format $day -format {%m/%d/%Y}]
+        set end   [clock format $tomorrow -format {%m/%d/%Y}]
+        if {$options(-rotext) ne {}} {
+            $options(-rotext) delete 1.0 end
+        }
+        set agendaDone 0
+        set agendaFP [open "|[AgendaAllCommand $start $end]" r]
+        fileevent $agendaFP readable [mymethod _processAgendaPipe]
+        tkwait variable agendaDone
+    }
+    method _processAgendaPipe {} {
+        if {[gets $agendaFP line] < 0} {
+            catch {close $agendaFP}
+            if {$options(-showagenda) ne {}} {
+                uplevel #0 $options(-showagenda)
+            }
+            incr agendaDone
+        }
+        if {$options(-rotext) ne {}} {
+            $options(-rotext) insert end "[filterVT100 $line]\n"
         }
     }
 }
