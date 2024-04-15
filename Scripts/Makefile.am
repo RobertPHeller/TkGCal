@@ -73,10 +73,6 @@ CommonScripts = ReadConfiguration.tcl splash.tcl mainwindow.tcl gettext.tcl \
 		snitrotext.tcl snitlistbox.tcl snitpagesmanager.tcl \
 		snittree.tcl snitScrollNotebook.tcl 
 
-pkgdatadir = $(datadir)/$(PACKAGE)/Common
-pkgdata_DATA = $(CommonScripts) pkgIndex.tcl \
-	DeepwoodsBanner.gif new.gif open.gif save.gif print.gif close.gif
-
 BUILT_SOURCES = Version.tcl
 noinst_DATA = Version.tcl
 

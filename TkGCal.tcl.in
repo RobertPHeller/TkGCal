@@ -8,7 +8,7 @@
 #  Author        : $Author$
 #  Created By    : Robert Heller
 #  Created       : Sat Apr 13 13:35:58 2024
-#  Last Modified : <240414.1508>
+#  Last Modified : <240415.1053>
 #
 #  Description	
 #
@@ -195,8 +195,11 @@ snit::widget TkGCal {
         set string [regsub -all [format {%c\(0w%c\(B} 27 27] $string {┬}]
         return $string
     }
-    proc AgendaCommand {start end} {
-        return [list $GCALCLI --nocolor agenda --details end $start $end]
+    proc AgendaCommandTsv {start end} {
+        return [list $GCALCLI --nocolor agenda --tsv $start $end]
+    }
+    proc AgendaCommand {start end args} {
+        return [list $GCALCLI --nocolor agenda --width [from args -width 80] --details end $start $end]
     }
     proc AgendaAllCommand {start end} {
         return [list $GCALCLI --nocolor agenda --details all $start $end]
@@ -259,8 +262,15 @@ snit::widget TkGCal {
         
         global argv
         global argv0
+        if {[set index [lsearch -exact $argv -popup]] >= 0} {
+            set argv [lreplace $argv $index $index]
+            $type PopupAgenda [from argv -geometry {}]
+            return
+        }
         set mainwindow [mainwindow .mainwindow -scrolling false]
         pack $mainwindow -expand yes -fill both
+        wm title [winfo toplevel $mainwindow] "Calendar"
+        wm protocol [winfo toplevel $mainwindow] WM_DELETE_WINDOW ::exit
         set daysagenda [$mainwindow slideout add DaysAgenda]
         set daysagenda_date [ttk::labelframe $daysagenda.date -labelanchor n \
                              -text "The Date"]
@@ -287,12 +297,79 @@ snit::widget TkGCal {
               -command [list wm iconify [winfo toplevel $mainwindow]]
         $mainwindow menu entryconfigure file "Exit" \
               -command ::exit
+        set geo [from argv -geometry {}]
         $mainwindow showit
+        if {$geo ne {}} {
+            puts stderr "*** geo is \{$geo\}"
+            update idle
+            wm geometry . $geo
+        }
         if {[set index [lsearch -exact $argv -iconic]] >= 0} {
             set argv [lreplace $argv $index $index]
             wm iconify [winfo toplevel $mainwindow]
         }
+        $type Notify
     }
+    typemethod PopupAgenda {{geo {}}} {
+        wm title . "Agenda"
+        wm protocol . WM_DELETE_WINDOW ::exit
+        set scrollw [ScrolledWindow .agendaSW -scrollbar both -auto both]
+        pack $scrollw -expand yes -fill both
+        set agenda [ROText [$scrollw getframe].agenda -width 60]
+        $scrollw setwidget $agenda
+        set afp [open "|[AgendaCommand now +5d -width 60]" "r"]
+        fileevent $afp readable [mytypemethod fillagenda $afp $agenda]
+        set dismis [ttk::button .dismis -text Dismis -command ::exit]
+        pack $dismis -anchor center
+        if {$geo ne {}} {
+            update idle
+            wm geometry . $geo
+        }
+    }
+    typemethod fillagenda {fp text} {
+        if {[gets $fp line] < 0} {
+            catch {close $fp}
+        } else {
+            $text insert end "[filterVT100 $line]\n"
+        }
+    }
+    typemethod Notify {} {
+        catch [list exec {*}[ReminderCommand 15] &]
+        set afp [open "|[AgendaCommandTsv now +15m]" r]
+        fileevent $afp readable [mytypemethod Notify_popup $afp]
+        after 300000 [mytypemethod Notify]
+    }
+    #                          startdate                 starttime             enddate                      endtime                    title   
+    typevariable TSVPattern {^([^[:space:]]+)[[:space:]]([^[:space:]]+)[[:space:]]([^[:space:]]+)[[:space:]]([^[:space:]]+)[[:space:]](.*)$}
+    typemethod Notify_popup {fp} {
+        if {[gets $fp line] < 0} {
+            catch {close $fp}
+        } else {
+            if {[regexp $TSVPattern $line => \
+                 startdate starttime enddate endtime title] > 0} {
+                set future [expr {[clock scan "$startdate $starttime" -format {%Y-%m-%d %H:%M}] - [clock seconds]}]
+                if {$future > 0 && $future < [expr {15 * 60}]} {
+                    $type notice_popup $startdate $starttime $title
+                }
+            }
+        }
+    }
+    typevariable notice_popupIndex 0
+    typemethod notice_popup {date time title} {
+        incr notice_popupIndex
+        set noticePopup [toplevel .noticePopup$notice_popupIndex]
+        set message [message $noticePopup.message \
+                     -text [format "%s\n\n%s" $title $time]]
+        pack $message -expand yes -fill both
+        set button [ttk::button $noticePopup.dismis \
+                    -text Dismis -command \
+                    -command [list destroy $noticePopup]]
+        pack $button -anchor center
+        wm deiconify $noticePopup
+        update idle
+        wm transient $noticePopup [winfo toplevel $mainwindow]
+    }
+                    
     typecomponent _AddEventDialog
     
     typemethod _Create_AddEventDialog {} {
