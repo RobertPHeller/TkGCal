@@ -8,7 +8,7 @@
 #  Author        : $Author$
 #  Created By    : Robert Heller
 #  Created       : Sat Apr 13 13:35:58 2024
-#  Last Modified : <240413.2024>
+#  Last Modified : <240414.1508>
 #
 #  Description	
 #
@@ -49,6 +49,136 @@ package require tile
 package require MainWindow
 package require ScrollWindow
 package require ROText
+package require IconImage
+package require Dialog
+package require LabelFrames
+
+snit::type AddEventDialog {
+    pragma -hastypeinfo    no
+    pragma -hastypedestroy no
+    pragma -hasinstances   no
+    
+    typecomponent _addEventDialog
+    typecomponent _remind_time
+    typecomponent _remind_time_units
+    typecomponent _remind_method
+    typemethod GetRemind {} {
+        set time "[$_remind_time get][$_remind_time_units get]"
+        set meth "[$_remind_method get]"
+        if {$meth eq ""} {
+            return $time
+        } else {
+            return "$time $meth"
+        }
+    }
+    typevariable _remind_default 0
+    typemethod GetRemindDefault {} {
+        return $_remind_default
+    }
+    typecomponent _color
+    typemethod GetColor {} {
+        return [$_color get]
+    }
+    typecomponent _title
+    typemethod GetTitle {} {
+        return [$_title get]
+    }
+    typecomponent _who
+    typemethod GetWho {} {
+        return [$_who get]
+    }
+    typecomponent _where
+    typemethod GetWhere {} {
+        return [$_where get]
+    }
+    typecomponent _when
+    typemethod GetWhen {} {
+        return [$_when get]
+    }
+    typecomponent _duration
+    typemethod GetDuration {} {
+        return [$_duration get]
+    }
+    typecomponent _description
+    typemethod GetDescription {} {
+        return [string trim [$_description get 1.0 end]]
+    }
+    typevariable _allday 0
+    typemethod GetAllDay {} {
+        return $_allday
+    }
+    typevariable _calendar
+    typemethod GetCalendar {} {
+        return $_calendar
+    }
+    typemethod createDialog {window args} {
+        set calendars [list]
+        foreach l [lrange [split [exec {*}[TkGCal::ListCommand]] "\n"] 2 end] {
+            if {[regexp {^[[:space:]]*([^[:space:]]+)[[:space:]]+(.*)$} \
+                 $l => access title] > 0} {
+                if {$access eq "reader"} {continue}
+                lappend calendars $title
+            }
+        }
+        set _addEventDialog [Dialog .addEventDialog -title "Add New Event" \
+                             -modal local -bitmap questhead \
+                             -parent [from args -parent .] -transient yes \
+                             -default ok -cancel cancel]
+        $_addEventDialog add ok -text Ok
+        $_addEventDialog add cancel -text Cancel
+        set dframe [$_addEventDialog getframe]
+        set _title [LabelEntry $dframe.title -label "Title"]
+        pack $_title -fill x
+        set _who [LabelEntry $dframe.who -label "Who"]
+        pack $_who -fill x
+        set _where [LabelEntry $dframe.where -label "Where"]
+        pack $_where -fill x
+        set _when [LabelEntry $dframe.when -label "When"]
+        pack $_when -fill x
+        set _duration [LabelEntry $dframe.duration -label "Duration"]
+        pack $_duration -fill x
+        set allday [ttk::checkbutton $dframe.allday \
+                    -variable [mytypevar _allday] -text "All day?"]
+        pack $allday -fill x
+        set lf [LabelFrame $dframe.remindFrame -text "Reminders"]
+        pack $lf -fill x
+        set _color [LabelComboBox $dframe.color -label "Color" \
+                    -values {lavender sage grape flamingo banana tangerine \
+                    peacock graphite blueberry basil tomato}]
+        pack $_color -fill x
+        set lff [$lf getframe]
+        set _remind_time [ttk::spinbox $lff.time -from 1 -to 200 -increment 1]
+        pack $_remind_time -side left -fill x
+        set _remind_time_units [ttk::combobox $lff.units -values {w d h m}]
+        pack $_remind_time_units -side left
+        set _remind_method [ttk::combobox $lff.meth -values {popup email sms}]
+        pack $_remind_method -side left
+        set remind_default [ttk::checkbutton $lff.default \
+                            -text "Use Defaults?" \
+                            -variable [mytypevar _remind_default]]
+        pack $remind_default -side left
+        set descrlf [ttk::labelframe $dframe.descrlf -labelanchor nw \
+                     -text "Description"]
+        pack $descrlf -expand yes -fill both
+        set _description [text $descrlf.description -width 40 -height 5]
+        pack $_description -expand yes -fill both
+        set calendarlf [ttk::labelframe $dframe.calendarlf -labelanchor nw \
+                     -text "Calendar"]
+        pack $calendarlf
+        set i 0
+        foreach c $calendars {
+            incr i
+            pack [ttk::radiobutton $calendarlf.cal$i -text $c -value $c \
+                  -variable [mytypevar _calendar]] -fill x
+        }
+        set _calendar [lindex $calendars 0]
+        return $_addEventDialog
+    }
+    
+}
+
+    
+
 snit::widget TkGCal {
     typevariable GCALCLI {@GCALCLI@}
     proc filterVT100 {string} {
@@ -78,7 +208,10 @@ snit::widget TkGCal {
         return [list $GCALCLI remind --use-reminders 15]
     }
     proc AddCommand {args} {
-        return [concat  $GCALCLI add --noprompt $args]
+        return [list  $GCALCLI add --noprompt {*}$args]
+    }
+    proc ListCommand {} {
+        return [list  $GCALCLI --nocolor list]
     }
     typecomponent mainwindow
     typecomponent calendar
@@ -146,10 +279,78 @@ snit::widget TkGCal {
                       -rotext $daysagenda_agenda \
                       -showagenda [list $mainwindow slideout show DaysAgenda]]
         $mainwindow scrollwindow setwidget $calendar
-        if {[set index [lsearch -exact $argv -iconic]] < 0} {
-            $mainwindow showit
-        } else {
+        $mainwindow toolbar add Tools
+        $mainwindow toolbar show Tools
+        $mainwindow toolbar addbutton Tools add -text "Add Event" \
+              -image [IconImage image new] -command [mytypemethod _addEvent]
+        $mainwindow menu entryconfigure file "Close" \
+              -command [list wm iconify [winfo toplevel $mainwindow]]
+        $mainwindow menu entryconfigure file "Exit" \
+              -command ::exit
+        $mainwindow showit
+        if {[set index [lsearch -exact $argv -iconic]] >= 0} {
             set argv [lreplace $argv $index $index]
+            wm iconify [winfo toplevel $mainwindow]
+        }
+    }
+    typecomponent _AddEventDialog
+    
+    typemethod _Create_AddEventDialog {} {
+        if {[info exists _AddEventDialog] &&
+            [winfo exists $_AddEventDialog]} {
+            return $_AddEventDialog
+        }
+        set _AddEventDialog [AddEventDialog createDialog \
+                             $mainwindow.addEventDialog -parent $mainwindow]
+        return $_AddEventDialog
+    }
+        
+    typemethod _addEvent {} {
+        set result [[$type _Create_AddEventDialog] draw]
+        #puts stderr "*** $type _addEvent: result is $result"
+        if {$result == 0} {
+            set title [AddEventDialog GetTitle]
+            if {$title eq ""} {return}
+            lappend arglist --title $title
+            set who  [AddEventDialog GetWho]
+            if {$who ne ""} {
+                lappend arglist --who $who
+            }
+            set where [AddEventDialog GetWhere]
+            if {$where ne ""} {
+                lappend arglist --where $where
+            }
+            set when  [AddEventDialog GetWhen]
+            if {$when eq ""} {return}
+            lappend arglist --when $when
+            set duration [AddEventDialog GetDuration]
+            if {$duration ne ""} {
+                lappend arglist --duration $duration
+            }
+            if {[AddEventDialog GetAllDay]} {
+                lappend arglist --allday
+            }
+            set description [AddEventDialog GetDescription]
+            if {$description ne {}} {
+                lappend arglist --description $description
+            }
+            set color [AddEventDialog GetColor]
+            if {$color ne {}} {
+                lappend arglist --color $color
+            }
+            set remind [AddEventDialog GetRemind]
+            if {$remind ne {}} {
+                lappend arglist --reminder $remind
+            } elseif {[AddEventDialog GetRemindDefault]} {
+                lappend arglist --default-reminders
+            }
+            set calendar [AddEventDialog GetCalendar]
+            lappend arglist --calendar $calendar
+            set cmd [AddCommand {*}$arglist]
+            #puts stderr "*** $type _addEvent: cmd is $cmd"
+            if {[catch {exec {*}$cmd} result]} {
+                tk_messageBox -type ok -icon error -message $result
+            }
         }
     }
     component month
@@ -215,7 +416,7 @@ snit::widget TkGCal {
         }
         set day [clock scan [format "%s/1/%d" $currentMonth $currentYear] -format {%B/%d/%Y}]
         set start [clock format $day -format {%m/%d/%Y}]
-        set lastday [clock add $day 1 month -1 day]
+        set lastday [clock add $day 1 month]
         set end [clock format $lastday -format {%m/%d/%Y}]
         set cmd [AgendaCommand $start $end]
         #puts stderr "*** $self _populateCurrentMonth: cmd is \{$cmd\}"
