@@ -8,7 +8,7 @@
 #  Author        : $Author$
 #  Created By    : Robert Heller
 #  Created       : Sat Apr 13 13:35:58 2024
-#  Last Modified : <240415.1053>
+#  Last Modified : <240416.2007>
 #
 #  Description	
 #
@@ -362,7 +362,7 @@ snit::widget TkGCal {
                      -text [format "%s\n\n%s" $title $time]]
         pack $message -expand yes -fill both
         set button [ttk::button $noticePopup.dismis \
-                    -text Dismis -command \
+                    -text Dismis \
                     -command [list destroy $noticePopup]]
         pack $button -anchor center
         wm deiconify $noticePopup
